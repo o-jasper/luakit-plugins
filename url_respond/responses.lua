@@ -16,19 +16,29 @@ end
 
 local function itob(int)  return tonumber(int) ~= 0 end
 
+function match_in_list(list, str)
+   for i, el in pairs(list) do
+      if string.match(str, el) then
+         return i, el
+      end
+   end
+end
+
 function basic_response(how)
    local allowed_status = how.allowed_status or {committed=true, provisional=true, no_info=true}
    local allowed_long = how.allowed_long or {provisional=true}
    return {
       resource_request_starting=function (info, v, uri)
-         for _, el in pairs(how.exception_uri or {}) do
-            if string.match(uri, el) then  -- TODO regular expressions instead
-               return true, "exception"
-            end
+         if how.exception_uri  and match_in_list(how.exception_uri, uri) or
+            info.exception_uri and
+            match_in_list(lousy.util.string.split(info.exception_uri, " "), uri)
+         then
+           return true, "exception"
          end
+         local uri_maxlen = info.uri_maxlen or how.uri_maxlen
          if not allowed_status[info.status] then
             return false, "wrong_status"
-         elseif how.uri_maxlen and (#uri) > how.uri_maxlen and
+         elseif uri_maxlen and uri_maxlen ~= "none" and (#uri) > uri_maxlen and
                 not allowed_long[info.status] then
             return false, "uri too long"
          else
@@ -38,9 +48,8 @@ function basic_response(how)
       end,
       load_status=function(info, v, status)
          local tags = split_to_set(info.tags)
-         -- Script disabling.
+         -- Script disabling. (TODO doesnt seem to work)
          -- Specific configuration overrides global, no overrides yes.
-
          if status == "committed" and v.uri ~= "about:blank" then
             v.enable_scripts = itob(((not tags.noscript) and (tags.allow_script or how.allow_script)))
             v.enable_plugins = itob(((not tags.noplugin) and (tags.allow_plugin or how.allow_plugin)))
@@ -61,7 +70,7 @@ function reddit_response(how)
    for _, el in pairs(apilist) do
       table.insert(how.exception_uri, string.format("^https*://www.reddit.com/api/%s", el))
    end
-   local reddit = basic_response(how)
+   local basic = basic_response(how)
    return {
       resource_request_starting=function (info, v, uri)
          for _, el in pairs(apilist) do
@@ -82,8 +91,8 @@ function reddit_response(how)
                return string.format(file, math.random(10)), "countah"
             end
          end
-         return reddit.resource_request_starting(info, v, uri)
+         return basic.resource_request_starting(info, v, uri)
       end,
-      load_status=reddit.load_status,
+      load_status=basic.load_status,
    }
 end
