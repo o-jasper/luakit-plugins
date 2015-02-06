@@ -22,9 +22,8 @@ CREATE TABLE IF NOT EXISTS url_respond (
 ]])
 
 local shortlist = {}
-shortlist["www.reddit.com"] = {response="reddit", tags="", data=""}
-
-shortlist["www.wolfire.com"] = {response="monitor", tags="allow_script", data=""}
+shortlist["www.reddit.com"]  = {response="reddit"}
+shortlist["www.wolfire.com"] = {response="monitor", tags="allow_script"}
 
 -- This should be in lib/lousy/uri.lua ?
 function domain_of_uri(uri)
@@ -45,12 +44,15 @@ function get_response_info(uri, from_uri)
    if got then
       got.domain = domain
       got.from_domain = from_domain
+      got.data = got.data or ""  -- Fill in defaults.
+      got.tags = got.tags or ""
       return got
    end
 --   local rows = db:exec([[ SELECT domain, response, tags, data FROM url_respond WHERE domain = ?]],
    --                        { from_domain })
 --   return rows[1] or { domain=domain or "", from_domain=from_domain, response="default", tags="", data=""}
-   return { domain=domain, from_domain=from_domain, response="default", tags="", data=""}
+   return { domain=domain, from_domain=from_domain,
+            response="default", tags="", data=""}
 end
 
 require "url_respond.responses"
