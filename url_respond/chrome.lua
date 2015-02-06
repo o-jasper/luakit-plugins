@@ -8,8 +8,6 @@ local chrome = require("chrome")
 
 local chrome_ran_cnt = 0
 
-local requests={} -- TODO defunct.
-
 -- Functions that are also callable from javascript go here.
 export_funcs = {
    reset = function() requests = {} end
@@ -38,6 +36,7 @@ chrome.add(chrome_name, function (view, meta)
     local html = string.gsub(html, "{%%(%w+)}",
                              { stylesheet = stylesheet,
                                title=chrome_name,
+                               listCnt=#requests,
                                list=list_str,
                                responses = write_keypairs(response_cnt),
                                actions   = write_keypairs(action_cnt),
@@ -45,24 +44,23 @@ chrome.add(chrome_name, function (view, meta)
     view:load_string(html, chrome_uri)
     
     function on_first_visual(_, status)
-       print(status, view.uri. chrome_uri)
-        -- Wait for new page to be created
-        if status ~= "first-visual" then return end
+       -- Wait for new page to be created
+       if status ~= "first-visual" then return end
+       
+       for name, func in pairs(export_funcs) do
+          view:register_function(name, func)
+       end
+       
+       -- Hack to run-once
+       view:remove_signal("load-status", on_first_visual)
+       
+       -- Double check that we are where we should be
+       if view.uri ~= chrome_uri then return end
 
-        for name, func in pairs(export_funcs) do
-            view:register_function(name, func)
-        end
-
-        -- Hack to run-once
-        view:remove_signal("load-status", on_first_visual)
-
-        -- Double check that we are where we should be
-        if view.uri ~= chrome_uri then return end
-
-        chrome_ran_cnt = chrome_ran_cnt + 1
-        local run_js = string.gsub(js, "{%%(%w+)}", { chromeRanCnt=chrome_ran_cnt })
-        local _, err = view:eval_js(run_js, { no_return = true })
-        assert(not err, err)
+       chrome_ran_cnt = chrome_ran_cnt + 1
+       local run_js = string.gsub(js, "{%%(%w+)}", { chromeRanCnt=chrome_ran_cnt })
+       local _, err = view:eval_js(run_js, { no_return = true })
+       assert(not err, err)
     end
 
     view:add_signal("load-status", on_first_visual)

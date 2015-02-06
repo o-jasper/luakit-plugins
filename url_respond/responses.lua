@@ -14,22 +14,49 @@ function split_to_set(str, pattern, ret)
    return ret
 end
 
---
+local function itob(int)  return tonumber(int) ~= 0 end
+
 function basic_response(how)
-   local allowed_status = how.allowed_status or {committed=true, provisional=true}
+   local allowed_status = how.allowed_status or {committed=true, provisional=true, no_info=true}
    return {
-      resource_request_starting=function (info, v, _uri)
-         local action = true
-         if not allowed_status[info.status] then
-            action = false
+      resource_request_starting=function (info, v, uri)
+         for _, el in pairs(how.exception_uri) do
+            if string.match(uri, el) then  -- TODO regular expressions instead
+               return true, "exception"
+            end
          end
-         return action
+         if not allowed_status[info.status] then
+            return false, "wrong_status"
+         elseif how.uri_maxlen and #uri > uri_maxlen then
+            return false, "uri too long"
+         end
+         return action, "ok"
       end,
       load_status=function(info, v, status)
          local tags = split_to_set(info.tags)
-         -- No overrides yes.
-         --v.enable_scripts = ((not tags.noscript) and (tags.allow_script or how.allow_script))
-         --v.enable_plugins = ((not tags.noplugin) and (tags.allow_plugin or how.allow_plugin))
+         -- Script disabling.
+         -- Specific configuration overrides global, no overrides yes.
+
+         if status == "committed" and v.uri ~= "about:blank" then
+            v.enable_scripts = itob(((not tags.noscript) and (tags.allow_script or how.allow_script)))
+            v.enable_plugins = itob(((not tags.noplugin) and (tags.allow_plugin or how.allow_plugin)))
+         end
       end
+   }
+end
+
+function reddit_response(how)
+   how.exception_uri={"^https://www.reddit.com/api/login/.+",
+                      "^http://www.reddit.com/api/comment",
+                      "^http://www.reddit.com/api/editusertext",                      
+                      "^http://www.reddit.com/api/vote",
+                      "^http://www.reddit.com/api/submit"}
+   local reddit = basic_response(how)
+   return {
+      resource_request_starting=function (info, v, uri)
+         -- TODO.. hmmm
+         return reddit.resource_request_starting(info, v, uri)
+      end,
+      load_status=reddit.load_status,
    }
 end
