@@ -86,21 +86,21 @@ requests = requests or {}
 webview.init_funcs.url_respond_signals = function (view, w)
    view:add_signal("resource-request-starting", 
        function (v, uri)
+          -- Get info on domain.
           local info   = get_response_info(uri, v.uri)
           info.status = current_status[info.from_domain] or "no_info"
           
-          response_cnt[info.response] = (response_cnt[info.response] or 0) + 1
           local action, reason = responses[info.response].resource_request_starting(info, v, uri)
-          local name = "allow"
+          local name = "allow"  -- Figure out what to name it for statistics.
           if type(action) == "string" and action ~= uri then
              name = "redirect"
           elseif type(action) == "boolean" and not action then
              name = "block"
           end
-          if reason then
+          if reason then  -- Can give a reason too.
              name = string.format("%s: %s", name, reason)
           end
-          if not action or type(action) == "string" then
+          if not action or type(action) == "string" then  -- If blocked/redirected, log.
              info[1] = name
              if type(action) == "string" then info[2] = action end
              info.uri = uri
@@ -108,7 +108,10 @@ webview.init_funcs.url_respond_signals = function (view, w)
              info.urilen = #uri
              table.insert(requests, info) -- Insert blocked requests.
           end
+          -- Keep statistics.
           action_cnt[name] = (action_cnt[name] or 0) + 1
+          response_cnt[info.response] = (response_cnt[info.response] or 0) + 1
+          -- Return what we do.
           return action
        end)
    view:add_signal("load-status", 
