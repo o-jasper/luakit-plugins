@@ -100,6 +100,7 @@ webview.init_funcs.url_respond_signals = function (view, w)
           end
           if not action or type(action) == "string" then
              info[1] = name
+             if type(action) == "string" then info[2] = action end
              info.uri = uri
              info.vuri = v.uri
              info.urilen = #uri

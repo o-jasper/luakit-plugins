@@ -18,19 +18,23 @@ local function itob(int)  return tonumber(int) ~= 0 end
 
 function basic_response(how)
    local allowed_status = how.allowed_status or {committed=true, provisional=true, no_info=true}
+   local allowed_long = how.allowed_long or {provisional=true}
    return {
       resource_request_starting=function (info, v, uri)
-         for _, el in pairs(how.exception_uri) do
+         for _, el in pairs(how.exception_uri or {}) do
             if string.match(uri, el) then  -- TODO regular expressions instead
                return true, "exception"
             end
          end
          if not allowed_status[info.status] then
             return false, "wrong_status"
-         elseif how.uri_maxlen and #uri > uri_maxlen then
+         elseif how.uri_maxlen and (#uri) > how.uri_maxlen and
+                not allowed_long[info.status] then
             return false, "uri too long"
+         else
+            return true, "ok"
          end
-         return action, "ok"
+         assert(false)
       end,
       load_status=function(info, v, status)
          local tags = split_to_set(info.tags)
@@ -46,15 +50,38 @@ function basic_response(how)
 end
 
 function reddit_response(how)
-   how.exception_uri={"^https://www.reddit.com/api/login/.+",
-                      "^http://www.reddit.com/api/comment",
-                      "^http://www.reddit.com/api/editusertext",                      
-                      "^http://www.reddit.com/api/vote",
-                      "^http://www.reddit.com/api/submit"}
+   how.exception_uri = how.exception_uri or {}
+   -- TODO very incomplete..
+   table.insert(how.exception_uri, "^https://www.reddit.com/api/login/.+")
+   local apilist = {"comment", "del", "editusertext", "hide", "info", "marknsfw",
+                    "morechildren", "report", "save", "saved_categories.json",
+                    "sendreplies", "set_contest_mode", "set_subreddit_sticky",
+                    "store_visits", "submit", "unhide", "unmarknsfw", "unsave", "vote",
+   }
+   for _, el in pairs(apilist) do
+      table.insert(how.exception_uri, string.format("^https*://www.reddit.com/api/%s", el))
+   end
    local reddit = basic_response(how)
    return {
       resource_request_starting=function (info, v, uri)
-         -- TODO.. hmmm
+         for _, el in pairs(apilist) do
+            if string.match(uri, string.format("^https*://www.reddit.com/api/%s", el)) then
+               if string.sub(uri, 1, 6) == "http:" then
+                  return ("https:" .. string.sub(uri, 6)), "https-ize"
+               end
+               return true, "allow"
+            end
+         end
+         for _, el in pairs({ "^http://a.thumbs.redditmedia.com/.+png",
+                              "^https://pixel.redditmedia.com/i.gif.e.+",
+                              "^http://pixel.redditmedia.com/pixel/of_doom.png.r.+",
+                              "^http://www.redditstatic.com/icon.png"
+                            }) do
+            if string.match(uri, el) then
+               local file = "file:///home/jasper/oproj/browsing/luakit-stuff/luakit-plugins/url_respond/pic/%d.png"
+               return string.format(file, math.random(10)), "countah"
+            end
+         end
          return reddit.resource_request_starting(info, v, uri)
       end,
       load_status=reddit.load_status,
