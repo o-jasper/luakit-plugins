@@ -8,22 +8,37 @@ function is_monitorred(uri)
    return (#monitor == 0) or monitor[get_domain(uri)]
 end
 
-db = capi.sqlite3{ filename = capi.luakit.data_dir .. "/respond.db" }
-db:exec([[
-PRAGMA synchronous = OFF;
-PRAGMA secure_delete = 1;
+-- ... Not used at the moment.
+--db = capi.sqlite3{ filename = capi.luakit.data_dir .. "/respond.db" }
+--db:exec([[
+--PRAGMA synchronous = OFF;
+--PRAGMA secure_delete = 1;
+--
+--CREATE TABLE IF NOT EXISTS url_respond (
+--    domain TEXT PRIMARY KEY,
+--    response TEXT NOT NULL,
+--    tags TEXT NOT NULL,
+--    data TEXT NOT NULL,
+--    exceptions TEXT NOTE NULL
+--);
+--]])
 
-CREATE TABLE IF NOT EXISTS url_respond (
-    domain TEXT PRIMARY KEY,
-    response TEXT NOT NULL,
-    tags TEXT NOT NULL,
-    data TEXT NOT NULL
-);
-]])
-
+-- TODO system of matching end/beginning with the dict
 local shortlist = {}
 shortlist["www.reddit.com"]  = {response="reddit"}
 shortlist["www.wolfire.com"] = {response="monitor", tags="allow_script"}
+shortlist["www.youtube.com"] = { -- Seems that i cant do much better easily.
+   response="default",
+   exception_uri="^https://clients1.google.com/generate_204 ^https://s.ytimg.com/yts/jsbin/.+"
+}
+shortlist["www.tvgids.nl"] = {
+   response="default",
+   exception_uri="http://www.tvgids.nl/json/lists/.+"
+   -- Mirror 
+}
+-- Exceptions instead?
+shortlist["en.wikipedia.org"] = { response="permissive" }
+shortlist["bits.wikimedia.org"] = { response="permissive" }
 
 -- This should be in lib/lousy/uri.lua ?
 function domain_of_uri(uri)
@@ -46,13 +61,14 @@ function get_response_info(uri, from_uri)
       got.from_domain = from_domain
       got.data = got.data or ""  -- Fill in defaults.
       got.tags = got.tags or ""
+      got.exceptions = got.exceptions or ""
       return got
    end
 --   local rows = db:exec([[ SELECT domain, response, tags, data FROM url_respond WHERE domain = ?]],
    --                        { from_domain })
 --   return rows[1] or { domain=domain or "", from_domain=from_domain, response="default", tags="", data=""}
    return { domain=domain, from_domain=from_domain,
-            response="default", tags="", data=""}
+            response="default", tags="", data="", exceptions="" }
 end
 
 require "url_respond.responses"
@@ -87,7 +103,7 @@ webview.init_funcs.url_respond_signals = function (view, w)
    view:add_signal("resource-request-starting", 
        function (v, uri)
           -- Get info on domain.
-          local info   = get_response_info(uri, v.uri)
+          local info  = get_response_info(uri, v.uri)
           info.status = current_status[info.from_domain] or "no_info"
           
           local action, reason = responses[info.response].resource_request_starting(info, v, uri)
@@ -108,6 +124,9 @@ webview.init_funcs.url_respond_signals = function (view, w)
              info.urilen = #uri
              table.insert(requests, info) -- Insert blocked requests.
           end
+          if info.domain ~= info.from_domain then
+             print(action, name, info.from_domain, info.domain)
+          end
           -- Keep statistics.
           action_cnt[name] = (action_cnt[name] or 0) + 1
           response_cnt[info.response] = (response_cnt[info.response] or 0) + 1
@@ -116,7 +135,7 @@ webview.init_funcs.url_respond_signals = function (view, w)
        end)
    view:add_signal("load-status", 
        function (v, status)
-          local info   = get_response_info(nil, v.uri)
+          local info = get_response_info(nil, v.uri)
           current_status[info.from_domain or ""] = status
           info.status = status
           return responses[info.response].load_status(info, v, status)
