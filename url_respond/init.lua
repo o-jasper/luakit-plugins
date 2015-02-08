@@ -19,30 +19,40 @@ end
 --    response TEXT NOT NULL,
 --    tags TEXT NOT NULL,
 --    data TEXT NOT NULL,
---    exceptions TEXT NOTE NULL
+--    exception_uri TEXT NOTE NULL
 --);
 --]])
 
 -- TODO system of matching end/beginning with the dict
 local shortlist = {}
-shortlist["www.reddit.com"]  = {response="reddit"}
+
+shortlist["www.reddit.com"]  = {response="reddit", exception_uri="^http://..thumbs.redditmedia.com/.+.jpg"}
 shortlist["www.wolfire.com"] = {response="monitor", tags="allow_script"}
 shortlist["www.youtube.com"] = { -- Seems that i cant do much better easily.
    response="default",
-   exception_uri="^https://clients1.google.com/generate_204 ^https://s.ytimg.com/yts/jsbin/.+"
+   exception_uri="^https://clients1.google.com/generate_204 ^https://s.ytimg.com/yts/jsbin/.+ ^https://i.ytimg.com/vi/.+/mqdefault.jpg https://i.ytimg.com/vi/.+/default.jpg"
 }
+
 shortlist["www.tvgids.nl"] = {
    response="default",
    exception_uri="http://www.tvgids.nl/json/lists/.+"
    -- Mirror 
 }
+shortlist["imgur.com"] = {
+   response="default",
+   exception_uri="^http://..imgur.com/.+"
+}
 -- Exceptions instead?
 shortlist["en.wikipedia.org"] = { response="permissive" }
+shortlist["nl.wikipedia.org"] = { response="permissive" }
 shortlist["bits.wikimedia.org"] = { response="permissive" }
+
+local initial_shortlist = {}
+for k,v in pairs(shortlist) do initial_shortlist[k] = v end
 
 -- This should be in lib/lousy/uri.lua ?
 function domain_of_uri(uri)
-   if uri then
+   if type(uri) == "string" then
       uri = lousy.uri.parse(uri)
       if uri then
          return string.lower(uri.host)
@@ -53,8 +63,8 @@ end
 
 function get_response_info(uri, from_uri)
    -- The fuck.. it *is* getting a fucking string.
-   local domain = domain_of_uri((uri or "")) or ""
-   local from_domain = domain_of_uri((from_uri or "")) or ""
+   local domain = domain_of_uri(uri or "") or ""
+   local from_domain = domain_of_uri(from_uri or "") or ""
    local got = shortlist[from_domain]
    if got then
       got.domain = domain
@@ -141,5 +151,26 @@ webview.init_funcs.url_respond_signals = function (view, w)
           return responses[info.response].load_status(info, v, status)
        end)
 end
+
+local make_permissive = function(w)
+   shortlist[domain_of_uri(w.view.uri)] = {response="permissive"}
+   w:reload()
+end
+local make_initial = function(w)
+   local domain = domain_of_uri(w.view.uri)
+   shortlist[domain] = initial_shortlist[domain]
+end
+
+local key, buf, cmd = lousy.bind.key, lousy.bind.buf, lousy.bind.cmd
+
+add_binds("normal", { buf("^,k$", "Permissive urlrespond here(for session)",
+                          make_permissive) })
+add_binds("normal", { buf("^,K$", "urlRespond back to initial.",
+                          make_initial) })
+
+add_cmds({ cmd("urlRespondPermissive", "Permissive urlrespond here(for session)",
+               make_permissive) })
+add_cmds({ cmd("urlRespondDefault", "urlRespond back to initial.",
+               make_initial) })
 
 require "url_respond.chrome"

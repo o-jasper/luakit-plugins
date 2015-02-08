@@ -58,7 +58,7 @@ function basic_response(how)
    }
 end
 
-function reddit_response(how)
+function reddit_response(how, after)
    how.exception_uri = how.exception_uri or {}
    -- TODO very incomplete..
    table.insert(how.exception_uri, "^https://www.reddit.com/api/login/.+")
@@ -70,7 +70,7 @@ function reddit_response(how)
    for _, el in pairs(apilist) do
       table.insert(how.exception_uri, string.format("^https*://www.reddit.com/api/%s", el))
    end
-   local basic = basic_response(how)
+   if not after then after = basic_response(how) end
    return {
       resource_request_starting=function (info, v, uri)
          for _, el in pairs(apilist) do
@@ -91,8 +91,8 @@ function reddit_response(how)
                return string.format(file, math.random(10)), "countah"
             end
          end
-         return basic.resource_request_starting(info, v, uri)
+         return after.resource_request_starting(info, v, uri)
       end,
-      load_status=basic.load_status,
+      load_status=after.load_status,
    }
 end
