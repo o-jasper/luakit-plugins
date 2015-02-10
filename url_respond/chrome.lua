@@ -59,17 +59,20 @@ local pages = {
       local domain = dir_split[2] or "no domain"
       local info = domain_get_response_info(nil, domain)
       local tags_html = "(no tags)"
-      if #info.tags > 0 then
+      if #(info.tags) > 0 then
          tags_html = "<span>" .. table.concat(lousy.util.string.split(info.tags, " "),
                                               "</span>, <span class=\"tag>\">")
             .. "</span>"
       end
       local exceptions_html = "No pattern exceptions."
-      if #info.exception_uri > 0 then
-         exceptions_html = "<table><tr><td><code>" ..
-            table.concat(lousy.util.string.split(info.exception_uri, " "),
-                         "</code></td></tr><tr><td><code>") ..
-            "</code></td></tr></table>"
+      if #(info.exception_uri) > 0 then
+         exceptions_html = "<table>"
+         for _, e in pairs(info_exceptions(info)) do
+            exceptions_html = exceptions_html ..
+               string.format("<tr><td><code>%s</code></td><td>; %dms</td></tr>",
+                             e.pat, e.t)
+         end
+         exceptions_html = exceptions_html .. "</table>"
       end
       return string.gsub(html, "{%%(%w+)}",
                          { stylesheet = stylesheet,
