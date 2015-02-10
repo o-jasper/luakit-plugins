@@ -1,3 +1,4 @@
+
 -- String splitting, but producing a set instead. (lib/lousy/utils.lua?)
 function split_to_set(str, pattern, ret)
    if not pattern then pattern = "%s+" end
@@ -17,9 +18,7 @@ local function itob(int)  return tonumber(int) ~= 0 end
 
 function match_in_list(list, str)
    for i, el in pairs(list) do
-      if string.match(str, el) then
-         return i, el
-      end
+      if string.match(str, el) then return i, el end
    end
 end
 
@@ -29,9 +28,9 @@ function basic_response(how)
    local allowed_long = how.allowed_long or {provisional=true}
    return {
       resource_request_starting=function (info, v, uri)
-         if how.exception_uri  and match_in_list(how.exception_uri, uri) or
-            info.exception_uri and
-            match_in_list(lousy.util.string.split(info.exception_uri, " "), uri)
+         -- TODO give them a bit of time, and no more.
+         if how.exception_uri  and match_in_exceptions(how.exception_uri, uri) and
+            info.exception_uri and match_in_exceptions(info.exception_uri, uri)
          then
            return true, "exception"
          end
