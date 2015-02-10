@@ -1,4 +1,3 @@
-
 -- String splitting, but producing a set instead. (lib/lousy/utils.lua?)
 function split_to_set(str, pattern, ret)
    if not pattern then pattern = "%s+" end
@@ -25,7 +24,8 @@ function match_in_list(list, str)
 end
 
 function basic_response(how)
-   local allowed_status = how.allowed_status or {committed=true, provisional=true, no_info=true}
+   local allowed_status = how.allowed_status or
+      {committed=true, provisional=true, no_info=true}
    local allowed_long = how.allowed_long or {provisional=true}
    return {
       resource_request_starting=function (info, v, uri)
@@ -51,8 +51,10 @@ function basic_response(how)
          -- Script disabling. (TODO doesnt seem to work)
          -- Specific configuration overrides global, no overrides yes.
          if status == "committed" and v.uri ~= "about:blank" then
-            v.enable_scripts = itob(((not tags.noscript) and (tags.allow_script or how.allow_script)))
-            v.enable_plugins = itob(((not tags.noplugin) and (tags.allow_plugin or how.allow_plugin)))
+            v.enable_scripts = itob(((not tags.noscript) and
+                                        (tags.allow_script or how.allow_script)))
+            v.enable_plugins = itob(((not tags.noplugin) and
+                                        (tags.allow_plugin or how.allow_plugin)))
          end
       end
    }
