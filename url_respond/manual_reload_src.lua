@@ -1,10 +1,10 @@
--- TODO iterate through the img tags
---
+-- TODO doesnt work..
+
+
 local lousy = require("lousy")
 local key, buf, cmd = lousy.bind.key, lousy.bind.buf, lousy.bind.cmd
 
 local javascript = lousy.load_asset("url_respond/manual_reload_src.js")
---local url_respond=require("url_respond")
 
 -- Turns on relevant images.
 function enable_relevant_imgs(how, after)
@@ -27,7 +27,7 @@ end
 
 local allow = function(v)
    local add = v.view:eval_js("GyFXHnTVYFd0_cur_img_under_src()")
-   print(add)
+   print(add) -- stubbornly stays nil
    if add and string.sub(add, 0, 4) ~= "none" and add ~= "no_under" then
       -- Add to exception, create place to put if if necessary.      
       local got = url_respond.shortlist[domain_of_uri(v.view.uri)] or {response="default"}
