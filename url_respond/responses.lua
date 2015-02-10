@@ -28,7 +28,7 @@ function basic_response(how)
    local allowed_long = how.allowed_long or {provisional=true}
    return {
       resource_request_starting=function (info, v, uri)
-         -- TODO give them a bit of time, and no more.
+         -- TODO read the match info; time-allowed, black/white/only
          if how.exception_uri  and match_in_exceptions(how.exception_uri, uri) and
             info.exception_uri and match_in_exceptions(info.exception_uri, uri)
          then

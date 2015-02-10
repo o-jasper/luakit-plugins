@@ -74,33 +74,32 @@ function ensure_info(info)
    return info
 end
 
-function info_exceptions(info)
-   local list, out, i = lousy.util.string.split(info.exception_uri, " "), {}, 2
-   while i < #list do
-      if string.match(list[i], ":w%d+") then -- Indicates time that it is allowed.
-         table.insert(out, {pat=list[i - 1], t=tonumber(list[i])})
-         i = i + 2
+function info_exceptions(info)  -- TODO make __next metamethod
+   local list, out, way = lousy.util.string.split(info.exception_uri, " "), {}, {}
+   for _, el in pairs(list) do
+      if string.match(el, ":.+") then -- Indicates time that it is allowed.
+         local got = lousy.utils.string.split(el, ":")
+         way[got[1]] = got[2]
       else
-         table.insert(out, {pat=list[i - 1], t=0})
-         i = i + 1
+         local way_here = table.copy(way)
+         way_here.pat = el
+         table.insert(out, way_here)
       end
    end
-   table.insert(out, {pat=list[i - 1], t=0})
    return out
 end
 
 function match_in_exceptions(exception_uri, str)
-   local list, i = lousy.util.string.split(exception_uri, " "), 2
-   while i < #list do
-      if string.match(list[i], ":w%d+") then -- Indicates time that it is allowed.
-         if string.match(str, list[i-1]) then return tonumber(list[i]) end
-         i = i + 2
+   local list, out, way = lousy.util.string.split(info.exception_uri, " "), {}, {}
+   for _, el in pairs(list) do
+      if string.match(el, ":.+") then -- Indicates time that it is allowed.
+         local got = lousy.utils.string.split(el, ":")
+         way[got[1]] = got[2]
       else
-         if string.match(str, list[i-1]) then return 0 end
-         i = i + 1
+         way.pat = el
+         return way
       end
    end
-   if string.match(str, list[i-1]) then return 0 end
 end
 
 function domain_get_response_info(domain, from_domain)
