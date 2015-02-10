@@ -70,8 +70,37 @@ function ensure_info(info)
    info.response = info.response or "default"
    info.data = info.data or ""
    info.tags = info.tags or ""
-   info.exception_uri = exception_uri or ""
+   info.exception_uri = info.exception_uri or ""
    return info
+end
+
+function info_exceptions(info)
+   local list, out, i = lousy.util.string.split(info.exception_uri, " "), {}, 2
+   while i < #list do
+      if string.match(list[i], ":w%d+") then -- Indicates time that it is allowed.
+         table.insert(out, {pat=list[i - 1], t=tonumber(list[i])})
+         i = i + 2
+      else
+         table.insert(out, {pat=list[i - 1], t=0})
+         i = i + 1
+      end
+   end
+   table.insert(out, {pat=list[i - 1], t=0})
+   return out
+end
+
+function match_in_exceptions(exception_uri, str)
+   local list, i = lousy.util.string.split(exception_uri, " "), 2
+   while i < #list do
+      if string.match(list[i], ":w%d+") then -- Indicates time that it is allowed.
+         if string.match(str, list[i-1]) then return tonumber(list[i]) end
+         i = i + 2
+      else
+         if string.match(str, list[i-1]) then return 0 end
+         i = i + 1
+      end
+   end
+   if string.match(str, list[i-1]) then return 0 end
 end
 
 function domain_get_response_info(domain, from_domain)
