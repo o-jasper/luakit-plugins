@@ -1,3 +1,4 @@
+local socket = require("socket") -- I got to get my milliseconds from here? Wtf?
 
 local lousy = require("lousy")
 local capi = { luakit = luakit, sqlite3 = sqlite3 }
@@ -8,20 +9,19 @@ function is_monitorred(uri)
    return (#monitor == 0) or monitor[get_domain(uri)]
 end
 
--- ... Not used at the moment.
---db = capi.sqlite3{ filename = capi.luakit.data_dir .. "/respond.db" }
---db:exec([[
---PRAGMA synchronous = OFF;
---PRAGMA secure_delete = 1;
---
---CREATE TABLE IF NOT EXISTS url_respond (
---    domain TEXT PRIMARY KEY,
---    response TEXT NOT NULL,
---    tags TEXT NOT NULL,
---    data TEXT NOT NULL,
---    exception_uri TEXT NOTE NULL
---);
---]])
+db = capi.sqlite3{ filename = capi.luakit.data_dir .. "/respond.db" }
+db:exec([[
+PRAGMA synchronous = OFF;
+PRAGMA secure_delete = 1;
+
+CREATE TABLE IF NOT EXISTS url_respond (
+    domain TEXT PRIMARY KEY,
+    response TEXT NOT NULL,
+    tags TEXT NOT NULL,
+    data TEXT NOT NULL,
+    exception_uri TEXT NOTE NULL
+);
+]])
 
 -- TODO system of matching end/beginning with the dict
 local shortlist = {}
@@ -30,7 +30,7 @@ shortlist["www.reddit.com"]  = {response="reddit", exception_uri="^http://..thum
 shortlist["www.wolfire.com"] = {response="monitor", tags="allow_script"}
 shortlist["www.youtube.com"] = { -- Seems that i cant do much better easily.
    response="default",
-   exception_uri="^https://clients1.google.com/generate_204 ^https://s.ytimg.com/yts/jsbin/.+ ^https://i.ytimg.com/vi/.+/mqdefault.jpg https://i.ytimg.com/vi/.+/default.jpg"
+   exception_uri="^https://clients1.google.com/generate_204 ^https://s.ytimg.com/yts/jsbin/.+ ^https://i.ytimg.com/vi/.+/mqdefault.jpg ^https://i.ytimg.com/vi/.+/default.jpg"
 }
 
 shortlist["www.tvgids.nl"] = {
@@ -53,32 +53,38 @@ for k,v in pairs(shortlist) do initial_shortlist[k] = v end
 -- This should be in lib/lousy/uri.lua ?
 function domain_of_uri(uri)
    if type(uri) == "string" then
-      uri = lousy.uri.parse(uri)
-      if uri then
-         return string.lower(uri.host)
+      local _uri = lousy.uri.parse(uri)
+      if _uri then
+         return string.lower(_uri.host)
       end
    end
    return nil
 end
 
 function get_response_info(uri, from_uri)
-   -- The fuck.. it *is* getting a fucking string.
-   local domain = domain_of_uri(uri or "") or ""
-   local from_domain = domain_of_uri(from_uri or "") or ""
+   return domain_get_response_info(domain_of_uri(uri or "") or "",
+                                   domain_of_uri(from_uri or "") or "")
+end
+
+function ensure_info(info)
+   info.response = info.response or "default"
+   info.data = info.data or ""
+   info.tags = info.tags or ""
+   info.exception_uri = exception_uri or ""
+   return info
+end
+
+function domain_get_response_info(domain, from_domain)
    local got = shortlist[from_domain]
    if got then
       got.domain = domain
       got.from_domain = from_domain
-      got.data = got.data or ""  -- Fill in defaults.
-      got.tags = got.tags or ""
-      got.exceptions = got.exceptions or ""
-      return got
+      return ensure_info(got)
    end
 --   local rows = db:exec([[ SELECT domain, response, tags, data FROM url_respond WHERE domain = ?]],
    --                        { from_domain })
 --   return rows[1] or { domain=domain or "", from_domain=from_domain, response="default", tags="", data=""}
-   return { domain=domain, from_domain=from_domain,
-            response="default", tags="", data="", exceptions="" }
+   return ensure_info({ domain=domain, from_domain=from_domain })
 end
 
 require "url_respond.responses"
@@ -106,6 +112,15 @@ action_cnt = {}
 response_cnt = {}
 
 current_status = {}
+local status_max_time = 30  -- Keep for 30 seconds
+local last_cleanup = 0
+function cleanup_status()
+   last_cleanup = socket.gettime()
+-- TODO no cleanup... Note: statusses can turn into `"no_info"` so might not be able to.
+--   for domain, el in pairs(current_status) do
+--      local relevant_time = el.status_times.committed or el.status_time.provisional 
+--   end
+end
 
 requests = requests or {}
 
@@ -114,7 +129,7 @@ webview.init_funcs.url_respond_signals = function (view, w)
        function (v, uri)
           -- Get info on domain.
           local info  = get_response_info(uri, v.uri)
-          info.status = current_status[info.from_domain] or "no_info"
+          info.status = (current_status[info.from_domain] or {}).status or "no_info"
           
           local action, reason = responses[info.response].resource_request_starting(info, v, uri)
           local name = "allow"  -- Figure out what to name it for statistics.
@@ -146,7 +161,16 @@ webview.init_funcs.url_respond_signals = function (view, w)
    view:add_signal("load-status", 
        function (v, status)
           local info = get_response_info(nil, v.uri)
-          current_status[info.from_domain or ""] = status
+          -- Update the `current_status`.
+          local got = current_status[info.from_domain or ""] or {status_times={}}
+          got.status = status
+          got.status_times[status] = socket.gettime()
+          current_status[info.from_domain or ""] = got
+
+          if socket.gettime() - last_cleanup > status_max_time then
+             cleanup_status()
+          end
+          
           info.status = status
           return responses[info.response].load_status(info, v, status)
        end)

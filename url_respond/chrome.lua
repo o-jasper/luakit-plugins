@@ -1,16 +1,14 @@
+
+local chrome = require("chrome")
+
 chrome_name = "urlRespond"
 chrome_uri = string.format("luakit://%s/", chrome_name)
-
-local stylesheet = lousy.load_asset("url_respond/style.css") or ""
-local html = lousy.load_asset("url_respond/page.html")
-local js = lousy.load_asset("url_respond/js.js")
-local chrome = require("chrome")
 
 local chrome_ran_cnt = 0
 
 -- Functions that are also callable from javascript go here.
 export_funcs = {
-   reset = function() requests = {} end
+   reset_log = function() requests = {} end
    -- TODO
 }
 
@@ -22,28 +20,83 @@ function write_keypairs(of_table)
    return str
 end
 
+local stylesheet = lousy.load_asset("url_respond/style.css") or ""
+local html_templates = {}
+function get_template(name)
+   if not html_templates[name] then
+      html_templates[name] =
+         lousy.load_asset(string.format("url_respond/assets/%s.html", name))
+   end
+   return html_templates[name]
+end
+
+local pages = {
+   -- Log (like of shit that was blocked)
+   log = function(meta, dir_split, html)
+      local list_str = "<table>"
+      for _, r in pairs(requests) do
+         local line_str = ""
+         for _, el in pairs(r) do
+            line_str = line_str .. "<td>" .. el .. "</td>"
+         end
+         list_str = list_str .. "<tr>" .. line_str .. "</tr>"
+      end
+      list_str = list_str .. "</table>"
+      
+      chrome_ran_cnt = chrome_ran_cnt + 1
+      return string.gsub(html, "{%%(%w+)}",
+                         { stylesheet = stylesheet,
+                           title=chrome_name,
+                           listCnt=#requests,
+                           list=list_str,
+                           responses = write_keypairs(response_cnt),
+                           actions   = write_keypairs(action_cnt),
+                           chromeRanCnt=chrome_ran_cnt
+                         })
+   end,
+   -- Info about a particular domain.
+   about_domain = function(meta, dir_split, html)
+      local domain = dir_split[2] or "no domain"
+      local info = domain_get_response_info(nil, domain)
+      local tags_html = "(no tags)"
+      if #info.tags > 0 then
+         tags_html = "<span>" .. table.concat(lousy.util.string.split(info.tags, " "),
+                                              "</span>, <span class=\"tag>\">")
+            .. "</span>"
+      end
+      local exceptions_html = "No pattern exceptions."
+      if #info.exception_uri > 0 then
+         exceptions_html = "<table><tr><td><code>" ..
+            table.concat(lousy.util.string.split(info.exception_uri, " "),
+                         "</code></td></tr><tr><td><code>") ..
+            "</code></td></tr></table>"
+      end
+      return string.gsub(html, "{%%(%w+)}",
+                         { stylesheet = stylesheet,
+                           title=chrome_name,
+                           response=info.response,
+                           --chromeRanCnt=chrome_ran_cnt,
+                           aboutDomain=domain,
+                           exceptions=exceptions_html,
+                           tags=tags_html,
+                           data=info.data,                           
+                         })
+   end
+}
+
 chrome.add(chrome_name, function (view, meta)
-    local list_str = "<table>"
-    for _, r in pairs(requests) do
-       local line_str = ""
-       for _, el in pairs(r) do
-          line_str = line_str .. "<td>" .. el .. "</td>"
-       end
-       list_str = list_str .. "<tr>" .. line_str .. "</tr>"
+
+    local dir_split = lousy.util.string.split(meta.path, "/")
+    local use_name, use_uri = "log", string.format("luakit://%s/log", chrome_name)
+    if pages[dir_split[1]] then
+       use_name = dir_split[1]
+       use_uri  = meta.uri
     end
-    list_str = list_str .. "</table>"
+    local html = pages[use_name](meta, dir_split, get_template(use_name))
+
+    view:load_string(html, use_uri)
     
-    local html = string.gsub(html, "{%%(%w+)}",
-                             { stylesheet = stylesheet,
-                               title=chrome_name,
-                               listCnt=#requests,
-                               list=list_str,
-                               responses = write_keypairs(response_cnt),
-                               actions   = write_keypairs(action_cnt),
-                              })
-    view:load_string(html, chrome_uri)
-    
-    function on_first_visual(_, status)
+    function on_first_visual(v, status)
        -- Wait for new page to be created
        if status ~= "first-visual" then return end
        
@@ -53,16 +106,7 @@ chrome.add(chrome_name, function (view, meta)
        
        -- Hack to run-once
        view:remove_signal("load-status", on_first_visual)
-       
-       -- Double check that we are where we should be
-       if view.uri ~= chrome_uri then return end
-
-       chrome_ran_cnt = chrome_ran_cnt + 1
-       local run_js = string.gsub(js, "{%%(%w+)}", { chromeRanCnt=chrome_ran_cnt })
-       local _, err = view:eval_js(run_js, { no_return = true })
-       assert(not err, err)
     end
-
     view:add_signal("load-status", on_first_visual)
 end)
 
